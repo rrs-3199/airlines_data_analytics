@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: producer-script
+  namespace: streaming-analytical-apps
+data:
+  producer.py: |
+    from time import sleep
+    from json import dumps
+    from kafka import KafkaProducer
+    from datetime import datetime
+    
+    
+    producer = KafkaProducer(
+        bootstrap_servers=['kafka-broker:9092'],
+        value_serializer=lambda x: dumps(x).encode('utf-8'),
+    )
+    print("Successfully connected to Kafka broker")
+
+    print("Producer started. Sending messages...")
+    try:
+        for e in range(0, 10000000):
+            data = {
+                'id': e,
+                'salary': 150000 + e,
+                'incentive': 30000 + e,
+                "timestamp": datetime.now().isoformat()
+            }
+            future = producer.send('flight_india_ic_18', value=data)
+            print(f"Sent message: {data}")
+            sleep(2)
+    except Exception as e:
+        print(f"Error sending message: {e}")
+        raise
+    finally:
+        producer.close()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-producer
+  namespace: streaming-analytical-apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-producer
+  template:
+    metadata:
+      labels:
+        app: kafka-producer
+    spec:
+      containers:
+      - name: kafka-producer
+        image: python:3.9-slim
+        command: ["/bin/sh"]
+        args: ["-c", "pip install kafka-python && python /app/producer.py"]
+        volumeMounts:
+        - name: producer-script
+          mountPath: /app
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+      volumes:
+      - name: producer-script
+        configMap:
+          name: producer-script
