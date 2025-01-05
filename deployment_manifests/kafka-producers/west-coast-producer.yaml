@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: west-coast-producer-config
+  namespace: kafka-demo
+data:
+  producer.py: |
+    from json import dumps
+    from kafka import KafkaProducer
+    from datetime import datetime, timedelta
+    import time, uuid
+    from time import sleep
+    import random
+    
+    AIRPORTS = {
+        'LAX': 'Los Angeles',
+        'SFO': 'San Francisco',
+        'SEA': 'Seattle',
+        'PDX': 'Portland'
+    }
+    AIRLINES = ['United', 'Alaska', 'Southwest']
+    AIRCRAFT_TYPES = ['Boeing 737', 'Airbus A320', 'Boeing 787']
+
+    
+    def main():
+        # Initialize Kafka producer
+        producer = KafkaProducer(
+            bootstrap_servers=['kafka:9092'],
+            value_serializer=lambda x: dumps(x).encode('utf-8'),
+            batch_size=16384,
+            linger_ms=50,
+            compression_type='gzip'
+        )
+        flight_id = 1
+
+        try:
+            while True:
+                current_time = datetime.now()
+                departure = random.choice(list(AIRPORTS.keys()))
+                arrival = random.choice([k for k in AIRPORTS.keys() if k != departure])
+                flight_duration = timedelta(hours=random.uniform(1, 2.5))
+                
+                data = {
+                    'flight_id': f'WC{flight_id:04d}',
+                    'airline': random.choice(AIRLINES),
+                    'aircraft_type': random.choice(AIRCRAFT_TYPES),
+                    'departure_airport': departure,
+                    'departure_city': AIRPORTS[departure],
+                    'arrival_airport': arrival,
+                    'arrival_city': AIRPORTS[arrival],
+                    'scheduled_departure': current_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'scheduled_arrival': (current_time + flight_duration).strftime('%Y-%m-%d %H:%M:%S'),
+                    'passenger_count': random.randint(120, 220),
+                    'ticket_price': round(random.uniform(200.0, 600.0), 2),
+                    'flight_status': random.choice(['On Time', 'Delayed', 'Boarding', 'In Air']),
+                    'delay_minutes': random.randint(0, 40),
+                    'route_type': 'west_coast',
+                    'timestamp': f"{datetime.now()}",
+                }
+                
+                producer.send('west-coast-flights', value=data)
+                print(f"Sent flight data: {data}")
+                flight_id += 1
+                sleep(0.1)
+             
+        except KeyboardInterrupt:
+            print("\nShutting down producer...")
+            producer.close()
+
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            producer.close()
+            raise
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: west-coast-producer
+  namespace: kafka-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: west-coast-producer
+  template:
+    metadata:
+      labels:
+        app: west-coast-producer
+    spec:
+      containers:
+      - name: west-coast-producer
+        image: python:3.9-slim
+        command: ["/bin/sh"]
+        args: ["-c", "pip install kafka-python && python /app/producer.py"]
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: producer-script-v2
+          mountPath: /app
+      volumes:
+      - name: producer-script-v2
+        configMap:
+          name: west-coast-producer-config

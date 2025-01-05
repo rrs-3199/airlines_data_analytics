@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cross-country-producer-config
+  namespace: kafka-demo
+data:
+  producer.py: |
+    from json import dumps
+    from kafka import KafkaProducer
+    from datetime import datetime, timedelta
+    import time, uuid
+    from time import sleep
+    import random
+    
+    EAST_AIRPORTS = {
+        'JFK': 'New York',
+        'BOS': 'Boston',
+        'MIA': 'Miami'
+    }
+    WEST_AIRPORTS = {
+        'LAX': 'Los Angeles',
+        'SFO': 'San Francisco',
+        'SEA': 'Seattle'
+    }
+    AIRLINES = ['United', 'American', 'Delta']
+    AIRCRAFT_TYPES = ['Boeing 777', 'Airbus A350', 'Boeing 787']
+
+    
+    def main():
+        # Initialize Kafka producer
+        producer = KafkaProducer(
+            bootstrap_servers=['kafka:9092'],
+            value_serializer=lambda x: dumps(x).encode('utf-8'),
+            batch_size=16384,
+            linger_ms=50,
+            compression_type='gzip'
+        )
+        flight_id = 1
+
+        try:
+            while True:
+                current_time = datetime.now()
+                if random.random() < 0.5:
+                    departure = random.choice(list(EAST_AIRPORTS.keys()))
+                    arrival = random.choice(list(WEST_AIRPORTS.keys()))
+                    departure_city = EAST_AIRPORTS[departure]
+                    arrival_city = WEST_AIRPORTS[arrival]
+                else:
+                    departure = random.choice(list(WEST_AIRPORTS.keys()))
+                    arrival = random.choice(list(EAST_AIRPORTS.keys()))
+                    departure_city = WEST_AIRPORTS[departure]
+                    arrival_city = EAST_AIRPORTS[arrival]
+                
+                flight_duration = timedelta(hours=random.uniform(5, 6.5))
+                
+                data = {
+                    'flight_id': f'CC{flight_id:04d}',
+                    'airline': random.choice(AIRLINES),
+                    'aircraft_type': random.choice(AIRCRAFT_TYPES),
+                    'departure_airport': departure,
+                    'departure_city': departure_city,
+                    'arrival_airport': arrival,
+                    'arrival_city': arrival_city,
+                    'scheduled_departure': current_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'scheduled_arrival': (current_time + flight_duration).strftime('%Y-%m-%d %H:%M:%S'),
+                    'passenger_count': random.randint(200, 400),
+                    'ticket_price': round(random.uniform(400.0, 1200.0), 2),
+                    'flight_status': random.choice(['On Time', 'Delayed', 'Boarding', 'In Air']),
+                    'delay_minutes': random.randint(0, 60),
+                    'route_type': 'cross_country',
+                    'timestamp': f"{datetime.now()}",
+                }
+                
+                producer.send('cross-country-flights', value=data)
+                print(f"Sent flight data: {data}")
+                flight_id += 1
+                sleep(0.1)
+    
+        except KeyboardInterrupt:
+            print("\nShutting down producer...")
+            producer.close()
+
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            producer.close()
+            raise
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cross-country-producer
+  namespace: kafka-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cross-country-producer
+  template:
+    metadata:
+      labels:
+        app: cross-country-producer
+    spec:
+      containers:
+      - name: cross-country-producer
+        image: python:3.9-slim
+        command: ["/bin/sh"]
+        args: ["-c", "pip install kafka-python && python /app/producer.py"]
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: producer-script-v3
+          mountPath: /app
+      volumes:
+      - name: producer-script-v3
+        configMap:
+          name: cross-country-producer-config

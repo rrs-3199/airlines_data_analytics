@@ -1,0 +1,91 @@
+# 1. Create ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-service-account
+  namespace: spark-streaming-jobs
+---
+# 2. Create ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spark-cluster-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "persistentvolumeclaims"]
+  verbs: ["create", "get", "list", "watch", "update", "delete"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+---
+# 3. Create Pod Access Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-pod-reader
+  namespace: spark-streaming-jobs
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list", "watch"]
+---
+# 4. Create RoleBinding for Pod Access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-pod-reader-binding
+  namespace: spark-streaming-jobs
+subjects:
+- kind: ServiceAccount
+  name: spark-service-account
+  namespace: spark-streaming-jobs
+roleRef:
+  kind: Role
+  name: spark-pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# 5. Create Spark Operator Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-operator-role
+  namespace: spark-streaming-jobs
+rules:
+- apiGroups: ["sparkoperator.k8s.io"]
+  resources: ["sparkapplications", "scheduledsparkapplications"]
+  verbs: ["create", "get", "list", "watch", "update", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["create", "get", "list", "watch", "update", "delete"]
+---
+# 6. Create Spark Operator RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-operator-role-binding
+  namespace: spark-streaming-jobs
+subjects:
+- kind: ServiceAccount
+  name: spark-operator
+  namespace: spark-streaming-jobs
+roleRef:
+  kind: Role
+  name: spark-operator-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# 7. Create ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spark-cluster-role-binding
+subjects:
+- kind: ServiceAccount
+  name: spark-service-account
+  namespace: spark-streaming-jobs
+roleRef:
+  kind: ClusterRole
+  name: spark-cluster-role
+  apiGroup: rbac.authorization.k8s.io
