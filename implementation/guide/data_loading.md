@@ -1,4 +1,4 @@
-## Data Loading
+## 🚀 Data Loading
 
 Redis serves as our high-performance data store, enabling real-time access to processed flight analytics with sub-millisecond latency. The in-memory nature of Redis ensures quick retrieval of recent flight metrics for immediate analysis and reporting.
 

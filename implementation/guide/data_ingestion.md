@@ -1,4 +1,4 @@
-## Data Ingestion
+## 🚀 Data Ingestion
 
 Apache Kafka serves as our primary data source to handle high-volume, real-time flight data streaming from multiple regions. This enables us to process live flight information efficiently while ensuring data reliability and fault tolerance.
 
